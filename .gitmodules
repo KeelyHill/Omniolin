@@ -1,0 +1,3 @@
+[submodule "lib/Mozzi"]
+	path = lib/Mozzi
+	url = https://github.com/sensorium/Mozzi
