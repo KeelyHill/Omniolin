@@ -56,6 +56,11 @@ int * modeOffsets[] = {Maj_mode_offsets, pent_mode_offsets, pent_min_mode_offset
 #define MAX_SUSTAIN_L 255
 #define MAX_RELEASE_T 2000
 
+// can do more, but this is comfortable. TODO refine when in proper place
+#define MAX_GRAMS_POSSIBLE_FORCE_RES (1800)
+
+#define MIDI_CC_TREMOLO 92
+
 /* Control Variables */
 
 // frequency set by user, may not be playing this if sliding to it
@@ -105,8 +110,9 @@ void setup(){
     adsrEnv.setADLevels(255, sustain_L); // 255 for max
     adsrEnv.setAttackTime(attack_T);
     adsrEnv.setDecayTime(decay_T);
-    adsrEnv.setSustainTime(86400); // needs a value, else 0, so a day works
+    adsrEnv.setSustainTime(86400000); // needs a value, else 0
     adsrEnv.setReleaseTime(release_T);
+    // adsrEnv.setIdleTime(86400000);
     // end ADSR init
 
     repeatingNoteTest.set(90);
@@ -144,11 +150,13 @@ void noteOn(int midiNote) {
 void noteOff(int midiNote) {
     usbMIDI.sendNoteOff(midiNote, MIDI_VELOCITY, MIDI_CHANNEL);
 
+    Serial.println("note off");
+
     adsrEnv.noteOff();
 }
 
 /** custom helper for setting standard ADSR envelope */
-void updateADSR() {
+void updateADSRValues() {
     adsrEnv.setAttackTime(attack_T);
     adsrEnv.setDecayTime(decay_T);
     adsrEnv.setDecayLevel(sustain_L); // Mozzi calls decay level == sustain level
@@ -178,56 +186,87 @@ float calcGramsOfForce(int rawAnalogValue) {
      return force;
 }
 
+AnalogPin fr (A14, true); /// force force resistor
+AnalogPin sp (A15, true); /// soft potentiometer
+
 /** Where controlls (and the changes) affect the outout*/
 void updateControl(){
+    fr.noiseBuffer = 10;
 
-    int forceResistorRaw = analogRead(A14);
-    int softPotRaw = analogRead(A15); // mozzi version has trouble on this pin for some reason
+    fr.checkChanged();
+    sp.checkChanged();
 
-    Serial.print(forceResistorRaw);
-    Serial.print(" ");
-    Serial.println(softPotRaw);
-
-    float force = calcGramsOfForce(forceResistorRaw);
+    // Debug Prints
+    // int forceResistorRaw = analogRead(A14);
+    // int softPotRaw = analogRead(A15); // mozzi version has trouble on this pin for some reason
+    // int forceResistorRaw = fr.value;
+    // int softPotRaw = sp.value;
+    // Serial.print(forceResistorRaw);
+    // Serial.print(" ");
+    // Serial.println(softPotRaw);
     // Serial.println("Force: " + String(force) + " g");
 
+    static int quanta = -1;
+    static int prevQuanta = -1;
+
+    static int force = 0;
 
     static int flip = 0;
-    static int quanta = 0;
+
     static int curMidiNote = 0;
 
-    // if (repeatingNoteTest.ready()) {
-    //
-    //     // TODO TEMP quanta for testing
-    //     curMidiNote = tonicKeyNote[setTonic]+modeOffsets[0][quanta];
-    //     if (flip == 0) noteOn(
-    //                         curMidiNote
-    //                     //    tonicKeyFreqs[0]*modes[1][quanta]
-    //                     );
-    //     else if (flip == 1) {
-    //         noteOff(curMidiNote);
-    //         quanta++; quanta %= 16;
-    //         // aSin.setFreq((float)());
-    //     }
-    //     flip++;
-    //     if (flip >= 2) flip = 0;
-    //
-    //     repeatingNoteTest.start(); // restart repeating countdown for testing
-    // }
+    force = (int) calcGramsOfForce(forceResistorRaw);
 
+    /* Soft pot quanta determine */
+    softPotRaw -= 20;
+    if (softPotRaw <= 0 || force < 0) {
+        if (prevQuanta != -1) noteOff(curMidiNote);
+        prevQuanta = -1;
+    } else {
+        quanta = map(softPotRaw, 0, 1023, 0, 14);
+        // Serial.println(quanta);
 
-    /* Check and handle rotary encoder change */
-    if (encoderChangeSince != 0) {
+        if (prevQuanta != quanta) {
+            noteOff(curMidiNote);
 
-        setTonic = positive_modulo(setTonic + encoderChangeSince, 12); // (setTonic + encoderChangeSince) % 12;
-        // Serial.println(setTonic);
+            curMidiNote = tonicKeyNote[setTonic]+modeOffsets[0][quanta] + 12;
+            noteOn(curMidiNote);
 
-        encoderChangeSince = 0; // race condition, not criticaly important here
+            prevQuanta = quanta;
+
+        }
     }
+
+    // TODO affect Mozzi too based on this
+    int cappedForce = force > MAX_GRAMS_POSSIBLE_FORCE_RES ? MAX_GRAMS_POSSIBLE_FORCE_RES : force;
+
+    usbMIDI.sendControlChange(MIDI_CC_TREMOLO, map(cappedForce, 0, MAX_GRAMS_POSSIBLE_FORCE_RES, 0, 127), MIDI_CHANNEL); // midi attack
+
+    // Serial.println(map(cappedForce, 0, MAX_GRAMS_POSSIBLE_FORCE_RES, 0, 127));
+
+    // Automatic Testing, plays up the scale
+    /*
+    if (repeatingNoteTest.ready()) {
+        curMidiNote = tonicKeyNote[setTonic]+modeOffsets[0][quanta];
+        if (flip == 0) noteOn(
+                            curMidiNote
+                        //    tonicKeyFreqs[0]*modes[1][quanta]
+                        );
+        else if (flip == 1) {
+            noteOff(curMidiNote);
+            quanta++; quanta %= 16;
+            // aSin.setFreq((float)());
+        }
+        flip++;
+        if (flip >= 2) flip = 0;
+
+        repeatingNoteTest.start(); // restart repeating countdown for testing
+    }
+    */
 
     // do analog reads for the 8 pots less freqently (since they wont be changed much)
     // TODO this delay may not be needed since the teensy is probably fast enough.
-    if (delayCheckSynthParamPots.ready() && false) {
+    if (delayCheckSynthParamPots.ready() && true) {
 
         // potentiometer matrix (PM)
         static AnalogPin PM0(POT_A, true), PM1(POT_D, true), PM2(POT_S, true), PM3(POT_R, true),
@@ -262,15 +301,16 @@ void updateControl(){
         }
 
 
-        if (adsrChanged &&false) {
-            updateADSR(); // update envelope
+        if (adsrChanged && true) {
+            updateADSRValues(); // update envelope
 
-            Serial.print(attack_T); Serial.print("  ");
-            Serial.print(decay_T); Serial.print("  ");
-            Serial.print(sustain_L); Serial.print("  ");
-            Serial.print(release_T);Serial.println("  ");
+            // Serial.print(attack_T); Serial.print("  ");
+            // Serial.print(decay_T); Serial.print("  ");
+            // Serial.print(sustain_L); Serial.print("  ");
+            // Serial.print(release_T);Serial.println("  ");
         }
 
+        // other 4 'generic' potentiometers
         if (PM4.checkChanged()) {
             usbMIDI.sendControlChange(74, map(PM4.value, 0, 1023, 0, 127), MIDI_CHANNEL);
         }
@@ -290,6 +330,15 @@ void updateControl(){
         delayCheckSynthParamPots.start();
     }
 
+
+    /* Check and handle rotary encoder change */
+    if (encoderChangeSince != 0) {
+
+        setTonic = positive_modulo(setTonic + encoderChangeSince, 12); // (setTonic + encoderChangeSince) % 12;
+
+        encoderChangeSince = 0; // race condition, not criticaly important here
+    }
+
     if (adsrGain != 0) { // ADSR debug. tip: use Arduino serial plotter
         // Serial.println(gain);
     }
@@ -300,13 +349,15 @@ int updateAudio(){
     adsrEnv.update();
 
     adsrGain = adsrEnv.next(); // doing this here yields much smoother movement.
+    if (adsrGain < 5) adsrGain = 0;
+
     int64_t ret = aSin.next() * adsrGain;
     ret >>= 8; // gain is a byte, so shift back
 
     // if (ret != 0) Serial.println((int)ret);
+    // if (ret != 0) Serial.println((int)adsrGain);
 
-    return (int)(ret >> 0);
-    // return an int signal centred around 0
+    return (int)(ret); // return an int signal centred around 0
 }
 
 void encoderChange(int direction) {
