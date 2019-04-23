@@ -32,7 +32,7 @@ public:
     }
 
     boolean checkChanged() {
-        int newVal = mozziAnalogRead(pinNum);
+        int newVal = analogRead(pinNum);
         boolean isDifferent = newVal != value;
 
         if (simpleNoiseReduction && abs(newVal-value) < noiseBuffer) {
