@@ -73,7 +73,7 @@ enum mode {
     maj, minor, dim, pent
 } setMode = maj;
 
-int setTonic = 0;
+int setTonic = 7;
 
 /* end control vars */
 
