@@ -199,8 +199,8 @@ void updateControl(){
     // Debug Prints
     // int forceResistorRaw = analogRead(A14);
     // int softPotRaw = analogRead(A15); // mozzi version has trouble on this pin for some reason
-    // int forceResistorRaw = fr.value;
-    // int softPotRaw = sp.value;
+    int forceResistorRaw = fr.value;
+    int softPotRaw = sp.value;
     // Serial.print(forceResistorRaw);
     // Serial.print(" ");
     // Serial.println(softPotRaw);
@@ -273,6 +273,8 @@ void updateControl(){
                          PM4(A3, true), PM5(A2, true), PM6(A1, true), PM7(A0, true);
          // midi control codes: http://www.nortonmusic.com/midi_cc.html
 
+         PM0.noiseBuffer = 4;
+         PM1.noiseBuffer = 3;
 
         boolean adsrChanged = false; // stays false if no change so we can avoid extra unneeded calls
 
