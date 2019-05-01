@@ -150,7 +150,7 @@ void noteOn(int midiNote) {
 void noteOff(int midiNote) {
     usbMIDI.sendNoteOff(midiNote, MIDI_VELOCITY, MIDI_CHANNEL);
 
-    Serial.println("note off");
+    // Serial.println("note off");
 
     adsrEnv.noteOff();
 }
@@ -199,7 +199,7 @@ void updateControl(){
     // Debug Prints
     // int forceResistorRaw = analogRead(A14);
     // int softPotRaw = analogRead(A15); // mozzi version has trouble on this pin for some reason
-    int forceResistorRaw = fr.value;
+    // int forceResistorRaw = fr.value;
     int softPotRaw = sp.value;
     // Serial.print(forceResistorRaw);
     // Serial.print(" ");
@@ -215,7 +215,8 @@ void updateControl(){
 
     static int curMidiNote = 0;
 
-    force = (int) calcGramsOfForce(forceResistorRaw);
+    // force = (int) calcGramsOfForce(forceResistorRaw);
+    force = 20;
 
     /* Soft pot quanta determine */
     softPotRaw -= 20;
@@ -240,7 +241,7 @@ void updateControl(){
     // TODO affect Mozzi too based on this
     int cappedForce = force > MAX_GRAMS_POSSIBLE_FORCE_RES ? MAX_GRAMS_POSSIBLE_FORCE_RES : force;
 
-    usbMIDI.sendControlChange(MIDI_CC_TREMOLO, map(cappedForce, 0, MAX_GRAMS_POSSIBLE_FORCE_RES, 0, 127), MIDI_CHANNEL); // midi attack
+    // usbMIDI.sendControlChange(MIDI_CC_TREMOLO, map(cappedForce, 0, MAX_GRAMS_POSSIBLE_FORCE_RES, 0, 127), MIDI_CHANNEL); // midi attack
 
     // Serial.println(map(cappedForce, 0, MAX_GRAMS_POSSIBLE_FORCE_RES, 0, 127));
 
